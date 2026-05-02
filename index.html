@@ -80,16 +80,16 @@
       }
 
       function sendData(pos) {
-        // สร้าง URL พร้อมพารามิเตอร์ข้อมูล
-        let finalUrl = `${GAS_URL}?userId=${encodeURIComponent(userLineId)}&lat=${pos.coords.latitude}&lon=${pos.coords.longitude}`;
+        document.getElementById("status").innerHTML = "กำลังบันทึกข้อมูล...";
         
-        // เพิ่มเลขสุ่มต่อท้าย เพื่อบังคับให้เบราว์เซอร์ไม่ดึง Cache เก่ามาใช้
-        finalUrl += "&t=" + new Date().getTime();
+        // ส่งแบบ GET โดยเอาข้อมูลต่อท้าย URL
+        const finalUrl = `${GAS_URL}?userId=${encodeURIComponent(userLineId)}&lat=${pos.coords.latitude}&lon=${pos.coords.longitude}&t=${new Date().getTime()}`;
         
-        fetch(finalUrl)
+        fetch(finalUrl, { method: 'GET' }) // บังคับเป็น GET
         .then(response => response.text())
         .then(data => {
           document.getElementById("loader").style.display = "none";
+          // ถ้าสำเร็จจะได้รับข้อความ "สำเร็จ..." หรือ "ล้มเหลว..." ไม่ใช่ {"status":"ok"}
           updateLog(data.includes("สำเร็จ") ? "✅ " + data : "❌ " + data);
           
           if(data.includes("สำเร็จ")) {
