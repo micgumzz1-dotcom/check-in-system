@@ -4,97 +4,103 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>ลงเวลาทำงาน</title>
-    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    <script src="https://static.line-scdn.net/liff/edge/2.1/sdk.js"></script>
     <style>
       body { font-family: sans-serif; text-align: center; padding: 20px; background-color: #f4f6f9; }
       .container { background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); max-width: 400px; margin: auto; }
       button { background-color: #00B900; color: white; border: none; padding: 15px 30px; font-size: 18px; border-radius: 8px; cursor: pointer; width: 100%; display: none; margin-top: 20px;}
-      #status { color: #555; margin-top: 15px; font-size: 14px; text-align: left; background: #eee; padding: 10px; border-radius: 5px;}
+      #status { color: #555; margin-top: 15px; font-size: 13px; text-align: left; background: #eee; padding: 10px; border-radius: 5px; white-space: pre-wrap; }
       .loader { border: 4px solid #f3f3f3; border-top: 4px solid #00B900; border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; margin: auto; }
       @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+      .error-text { color: red; font-weight: bold; }
     </style>
   </head>
   <body>
     <div class="container">
       <h2>📍 ระบบลงเวลาทำงาน</h2>
       <div id="loader" class="loader"></div>
-      <p id="status">กำลังโหลดระบบ...</p>
+      <div id="status">กำลังเริ่มต้นระบบ...</div>
       <button id="btn" onclick="checkLocation()">กดเพื่อบันทึกเวลา</button>
     </div>
 
     <script>
       let userLineId = "";
-      // 🔴 1. วาง Web App URL จาก Google Apps Script ที่ช่องนี้ 🔴
+      let logs = [];
+
+      // 🔴🔴🔴 1. วาง URL ที่ได้จาก Google Apps Script ของคุณในเครื่องหมายคำพูดด้านล่าง 🔴🔴🔴
       const GAS_URL = "https://script.google.com/macros/s/AKfycbzcTs1RhuHfgjuRQP6lN9QEm7sYCa8QA74wDXhBNZnGMih3Dv6PImLjKiEVCHMG0eP6/exec";
 
+      function updateLog(msg) {
+        logs.push(msg);
+        document.getElementById("status").innerHTML = logs.join("\n");
+      }
+
       window.onload = function() {
-        main();
+        initializeLiff();
       };
 
-      async function main() {
+      async function initializeLiff() {
+        updateLog("1. กำลังโหลด LIFF SDK...");
         try {
-          // 🔴 2. เลข LIFF ID ของคุณ 🔴
-          await liff.init({ liffId: "2009956605-7f1hhecd" }); 
-          
+          if (typeof liff === 'undefined') throw new Error("โหลดไฟล์ SDK ไม่สำเร็จ");
+
+          await liff.init({ liffId: "2009956605-7f1hhecd" });
+          updateLog("2. LIFF Init สำเร็จ");
+
           if (!liff.isLoggedIn()) {
+            updateLog("3. ยังไม่ได้ล็อกอิน... กำลังพาไปหน้า Login");
             liff.login();
           } else {
             const profile = await liff.getProfile();
             userLineId = profile.userId;
-            
-            document.getElementById("status").innerHTML = "สวัสดีคุณ " + profile.displayName;
+            updateLog("3. สวัสดีคุณ " + profile.displayName);
             document.getElementById("loader").style.display = "none";
             document.getElementById("btn").style.display = "block";
           }
         } catch (err) {
-          document.getElementById("status").innerHTML = "Error LIFF: " + err.message;
-          document.getElementById("loader").style.display = "none";
+          updateLog("❌ เกิดข้อผิดพลาด: " + err.message);
         }
       }
 
       function checkLocation() {
         document.getElementById("btn").style.display = "none";
         document.getElementById("loader").style.display = "block";
-        document.getElementById("status").innerHTML = "กำลังดึงพิกัด GPS...";
+        updateLog("4. กำลังขอสิทธิ์ GPS...");
 
-        navigator.geolocation.getCurrentPosition(sendData, showError, { enableHighAccuracy: true });
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            updateLog("5. ได้พิกัดแล้ว กำลังส่งข้อมูล...");
+            sendData(pos); // เรียกใช้ฟังก์ชัน fetch ข้อมูล
+          },
+          (err) => {
+            updateLog("❌ GPS Error: " + err.message);
+            document.getElementById("btn").style.display = "block";
+          },
+          { enableHighAccuracy: true }
+        );
       }
 
       function sendData(pos) {
-        document.getElementById("status").innerHTML = "กำลังบันทึกข้อมูล...";
+        // นำพิกัดและ ID มาต่อท้าย URL เพื่อส่งแบบ GET
+        const finalUrl = `${GAS_URL}?userId=${encodeURIComponent(userLineId)}&lat=${pos.coords.latitude}&lon=${pos.coords.longitude}`;
         
-        // ส่งข้อมูลไปที่ Google Apps Script
-        fetch(GAS_URL, {
-          method: 'POST',
-          body: JSON.stringify({
-            userId: userLineId,
-            lat: pos.coords.latitude,
-            lon: pos.coords.longitude
-          })
-        })
+        fetch(finalUrl)
         .then(response => response.text())
         .then(data => {
           document.getElementById("loader").style.display = "none";
-          document.getElementById("status").innerHTML = "<strong>" + data + "</strong>";
+          updateLog(data.includes("สำเร็จ") ? "✅ " + data : "❌ " + data);
           
           if(data.includes("สำเร็จ")) {
              setTimeout(() => { liff.closeWindow(); }, 3000); 
           } else {
              document.getElementById("btn").style.display = "block";
-             document.getElementById("btn").innerText = "ลองใหม่อีกครั้ง";
           }
         })
         .catch(error => {
           document.getElementById("loader").style.display = "none";
-          document.getElementById("status").innerHTML = "Server Error: " + error;
+          updateLog("❌ Network Error: " + error.message);
           document.getElementById("btn").style.display = "block";
         });
-      }
-
-      function showError(error) {
-        document.getElementById("loader").style.display = "none";
-        document.getElementById("status").innerHTML = "ไม่สามารถดึงพิกัดได้ กรุณาเปิด GPS";
-        document.getElementById("btn").style.display = "block";
       }
     </script>
   </body>
