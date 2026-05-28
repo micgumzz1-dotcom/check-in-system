@@ -114,6 +114,7 @@
         
         fetch(GAS_URL, { 
           method: 'POST',
+          redirect: 'follow',
           headers: {
             // ใช้ text/plain เพื่อป้องกันปัญหา CORS Preflight ใน GAS
             'Content-Type': 'text/plain;charset=utf-8' 
