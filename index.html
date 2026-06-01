@@ -13,9 +13,15 @@
       @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
       
       .btn-group { display: flex; flex-direction: column; gap: 15px; margin-top: 20px; }
-      button { color: white; border: none; padding: 18px 10px; font-size: 18px; border-radius: 8px; cursor: pointer; width: 100%; font-weight: bold;}
+      button { color: white; border: none; padding: 18px 10px; font-size: 18px; border-radius: 8px; cursor: pointer; width: 100%; font-weight: bold; transition: 0.3s;}
+      button:disabled { opacity: 0.5; cursor: not-allowed; }
+      
       .btn-in { background-color: #00B900; }
       .btn-out { background-color: #ff4d4d; }
+      .btn-info { background-color: #17a2b8; font-size: 16px; padding: 12px 10px; }
+      
+      .info-panel { display: none; text-align: left; background: #e9ecef; padding: 15px; margin-top: 15px; border-radius: 8px; font-size: 13px; line-height: 1.6; color: #333; border-left: 4px solid #17a2b8;}
+      .error-text { color: #dc3545; font-weight: bold; }
     </style>
   </head>
   <body>
@@ -26,8 +32,24 @@
       
       <div id="action-area" style="display: none;">
         <div class="btn-group" id="btn-group">
-          <button class="btn-in" onclick="confirmAction('in')">ลงเวลาเข้างาน</button>
-          <button class="btn-out" onclick="confirmAction('out')">ลงเวลาออกงาน</button>
+          <button id="btn-in" class="btn-in" onclick="confirmAction('in')">ลงเวลาเข้างาน</button>
+          <button id="btn-out" class="btn-out" onclick="confirmAction('out')">ลงเวลาออกงาน</button>
+          <button id="btn-info" class="btn-info" onclick="toggleInfo()">ℹ️ ดูรายละเอียดเวลาการทำงาน</button>
+        </div>
+        
+        <div id="info-panel" class="info-panel">
+          <b>📌 กะการทำงานปกติ</b><br>
+          ☀️ <b>เช้า:</b> เข้า 08:30 (สาย 08:45) | เลิก 13:00<br>
+          🌤️ <b>บ่าย:</b> เข้า 12:30 (สาย 12:45) | เลิก 17:00<br>
+          🌙 <b>เย็น:</b> เข้า 16:00 (สาย 16:15) | เลิก 20:30<br>
+          <hr style="border-top: 1px solid #ccc;">
+          <b>📌 การนับคาบ และ OT</b><br>
+          ✅ <b>1 คาบ:</b> ทำงาน 3 ชม. 15 นาที - 6 ชม. 30 นาที<br>
+          <i>(จะได้ OT เมื่อเวลาทำงานเกิน 4 ชม. 15 นาที)</i><br><br>
+          ✅ <b>2 คาบ:</b> ทำงาน 6 ชม. 30 นาที - 10 ชม. 15 นาที<br>
+          <i>(จะได้ OT เมื่อเวลาทำงานเกิน 8 ชม.)</i><br><br>
+          ✅ <b>3 คาบ:</b> ทำงานมากกว่า 10 ชม. 15 นาทีขึ้นไป<br>
+          <i>(จะได้ OT เมื่อเวลาทำงานเกิน 11 ชม. 45 นาที)</i>
         </div>
       </div>
     </div>
@@ -36,12 +58,18 @@
       let userLineId = "";
       let logs = [];
       let actionType = ""; 
+      let isProcessing = false; // ป้องกันการกดเบิ้ล (Debounce)
 
-      const GAS_URL = "https://script.google.com/macros/s/AKfycbzcTs1RhuHfgjuRQP6lN9QEm7sYCa8QA74wDXhBNZnGMih3Dv6PImLjKiEVCHMG0eP6/exec";
+      const GAS_URL = "https://script.google.com/macros/s/AKfycbzcTs1RhuHfgjuRQP6lN9QEm7sYCa8QA74wDXhBNZnGMih3Dv6PImLjKiEVCHMG0eP6/exec"; // <-- ใส่ URL Web App ของคุณ
 
       function updateLog(msg) {
         logs.push(msg);
         document.getElementById("status").innerHTML = logs.join("\n");
+      }
+
+      function toggleInfo() {
+        let panel = document.getElementById("info-panel");
+        panel.style.display = (panel.style.display === "block") ? "none" : "block";
       }
 
       window.onload = function() {
@@ -51,59 +79,57 @@
       async function initializeLiff() {
         updateLog("1. กำลังโหลด LIFF SDK...");
         try {
-          if (typeof liff === 'undefined') throw new Error("โหลดไฟล์ SDK ไม่สำเร็จ");
-
-          await liff.init({ liffId: "2009956605-7f1hhecd" });
-          updateLog("2. LIFF Init สำเร็จ");
-
+          await liff.init({ liffId: "2009956605-7f1hhecd" }); // <-- ใส่ LIFF ID ของคุณ
           if (!liff.isLoggedIn()) {
-            updateLog("3. ยังไม่ได้ล็อกอิน... กำลังพาไปหน้า Login");
+            updateLog("2. กำลังพาไปหน้า Login...");
             liff.login();
           } else {
             const profile = await liff.getProfile();
             userLineId = profile.userId;
-            updateLog("3. สวัสดีคุณ " + profile.displayName + "\nกรุณากดปุ่มเพื่อลงเวลาเข้า/ออกงาน");
+            updateLog("2. สวัสดีคุณ " + profile.displayName + "\nกรุณากดปุ่มเพื่อลงเวลาเข้า/ออกงาน");
             document.getElementById("loader").style.display = "none";
             document.getElementById("action-area").style.display = "block";
           }
         } catch (err) {
-          updateLog("❌ เกิดข้อผิดพลาด: " + err.message);
+          updateLog("<span class='error-text'>❌ Error: " + err.message + "</span>");
         }
       }
 
-      // ฟังก์ชันเพิ่มหน้าต่างยืนยัน
       function confirmAction(type) {
-        let actionText = type === 'in' ? "ลงเวลาเข้างาน" : "ลงเวลาออกงาน";
-        let isConfirmed = confirm(`คุณยืนยันที่จะ ${actionText} ใช่หรือไม่?`);
+        if (isProcessing) return; // ถ้าระบบกำลังทำงานอยู่ ให้ปฏิเสธการกดซ้ำ
         
-        if (isConfirmed) {
+        let actionText = type === 'in' ? "ลงเวลาเข้างาน" : "ลงเวลาออกงาน";
+        if (confirm(`คุณยืนยันที่จะ ${actionText} ใช่หรือไม่?`)) {
           checkLocation(type);
         }
       }
 
       function checkLocation(type) {
+        isProcessing = true; // ล็อกปุ่ม
+        document.getElementById("btn-in").disabled = true;
+        document.getElementById("btn-out").disabled = true;
+        
         actionType = type;
         document.getElementById("btn-group").style.display = "none";
         document.getElementById("loader").style.display = "block";
         
         let actionText = type === 'in' ? "เข้างาน" : "ออกงาน";
-        updateLog(`4. กำลังบันทึก [${actionText}]...`);
+        updateLog(`3. กำลังดึงพิกัดเพื่อ [${actionText}]...`);
 
         navigator.geolocation.getCurrentPosition(
           (pos) => {
-            updateLog("5. ได้พิกัดแล้ว กำลังส่งข้อมูล...");
+            updateLog("4. ได้พิกัดแล้ว กำลังส่งข้อมูล...");
             sendData(pos);
           },
           (err) => {
-            updateLog("❌ GPS Error: " + err.message);
-            document.getElementById("btn-group").style.display = "flex";
+            updateLog("<span class='error-text'>❌ GPS Error: กรุณาเปิด GPS และอนุญาตการเข้าถึงตำแหน่ง</span>");
+            resetUI(); // คลายล็อกปุ่ม
           },
-          { enableHighAccuracy: true }
+          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
         );
       }
 
       function sendData(pos) {
-        // สร้าง Object เก็บข้อมูลที่จะส่ง
         let payload = {
           userId: userLineId,
           lat: pos.coords.latitude,
@@ -115,28 +141,35 @@
         fetch(GAS_URL, { 
           method: 'POST',
           redirect: 'follow',
-          headers: {
-            // ใช้ text/plain เพื่อป้องกันปัญหา CORS Preflight ใน GAS
-            'Content-Type': 'text/plain;charset=utf-8' 
-          },
-          body: JSON.stringify(payload) // แปลงเป็น JSON String
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(payload) 
         })
-        .then(response => response.text())
+        .then(response => response.json()) // รับค่ากลับมาเป็น JSON
         .then(data => {
           document.getElementById("loader").style.display = "none";
-          updateLog(data.includes("สำเร็จ") ? "✅ " + data : "❌ " + data);
           
-          if(data.includes("สำเร็จ")) {
+          if(data.status === "success") {
+             updateLog("✅ " + data.message);
              setTimeout(() => { liff.closeWindow(); }, 3000); 
           } else {
-             document.getElementById("btn-group").style.display = "flex";
+             // แสดง Error ชัดเจน เช่น อยู่นอกพื้นที่
+             updateLog("<span class='error-text'>❌ " + data.message + "</span>");
+             resetUI();
           }
         })
         .catch(error => {
           document.getElementById("loader").style.display = "none";
-          updateLog("❌ Error: " + error.message);
-          document.getElementById("btn-group").style.display = "flex";
+          updateLog("<span class='error-text'>❌ Network Error: ระบบเครือข่ายมีปัญหา กรุณาลองใหม่</span>");
+          resetUI();
         });
+      }
+
+      // ฟังก์ชันสำหรับเคลียร์สถานะให้กลับมากดปุ่มได้ใหม่
+      function resetUI() {
+        isProcessing = false;
+        document.getElementById("btn-in").disabled = false;
+        document.getElementById("btn-out").disabled = false;
+        document.getElementById("btn-group").style.display = "flex";
       }
     </script>
   </body>
